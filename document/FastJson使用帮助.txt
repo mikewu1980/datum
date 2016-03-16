@@ -1,0 +1,655 @@
+一、简介
+一个JSON库涉及的最基本功能就是序列化和反序列化。Fastjson支持java bean的直接序列化。你可以使用com.alibaba.fastjson.JSON这个类进行序列化和反序列化。
+
+
+1、Maven依赖：
+<dependency>
+	<groupId>com.alibaba</groupId>
+	<artifactId>fastjson</artifactId>
+	<version>1.2.7</version>
+</dependency>
+
+
+2、帮助文档
+https://github.com/Alibaba/fastjson/wiki/%E9%A6%96%E9%A1%B5
+
+
+
+
+
+二、序列化
+所谓序列化，就是将java各种对象转化为json串。见下图：
+http://cms.csdnimg.cn/article/201409/25/542381f7453e1.jpg
+平常我们经常用到的是JSON.toJSONString()这个静态方法来实现序列化。其实JSON是一个抽象类，该类实现了JSONAware（转为json串）和JSONStreamAware（将json串写入Appendable中）的接口，同时又是JSONArray（内部实现就是个List）和JSONObject（内部实现就是个Map）的父类。JSON.toJSONString()方法内部实现基本相同，为做某些特定配置，对外暴露的接口可能不同。该方法的实现实际托付给了JSONSerializer类。
+
+JSONSerializer类相当于一个序列化组合器，它将上层调用、序列化配置、具体类型序列化实现、序列化字符串拼接等功能组合在一起，方便外部统一调用。该类有几个重要的成员，SerializeConfig、SerializeWriter、各种Filter列表、DateFormat、SerialContext等，还有每次对各个具体对象序列化的ObjectSerializer（非JSONSerializer的成员变量）。下面就来挨个说明其各自功能。
+
+
+1、基本序列化
+调用JSON.toJSONString方法，把对象转化为JSON格式的文本。
+==================================================================================================================================
+String json = JSON.toJSONString(obj);
+==================================================================================================================================
+
+
+2、使用单引号
+标准的JSON是使用双引号的，javascript支持使用单引号格式的json文本，fastjson也支持这个特性，打开SerializerFeature.UseSingleQuotes这个特性就可以了。
+==================================================================================================================================
+String json = JSON.toJSONString(o, SerializerFeature.UseSingleQuotes);
+==================================================================================================================================
+fastjson序列化时可以选择的SerializerFeature有十几个，你可以按照自己的需要去选择使用。
+
+
+3、日期格式化
+fastjson直接支持日期类型数据的格式化，包括java.util.Date、java.sql.Date、java.sql.Timestamp、java.sql.Time。
+缺省情况下，fastjson将Date类型序列化为long，这个使得序列化和反序列化的过程不会导致时区问题。
+==================================================================================================================================
+long millis = 1324138987429L;
+Date date = new Date(millis);
+System.out.println(JSON.toJSONString(date));
+==================================================================================================================================
+输出结果：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1324138987429
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+fastjson还提供了基于格式化输出的SerializerFeature。
+==================================================================================================================================
+String json = JSON.toJSONString(date, SerializerFeature.WriteDateUseDateFormat);
+==================================================================================================================================
+输出结果：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"2011-12-18 00:23:07"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+你可以指定输出日期的格式，比如修改为输出毫秒。
+==================================================================================================================================
+String json = JSON.toJSONStringWithDateFormat(date, "yyyy-MM-dd HH:mm:ss.SSS");
+==================================================================================================================================
+输出结果：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"2011-12-18 00:23:07.429"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+全局修改日期格式
+==================================================================================================================================
+JSON.DEFFAULT_DATE_FORMAT = "yyyy-MM-dd";
+JSON.toJSONString(obj, SerializerFeature.WriteDateUseDateFormat);
+==================================================================================================================================
+反序列化能够自动识别如下日期格式：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ISO-8601日期格式
+    yyyy-MM-dd
+    yyyy-MM-dd HH:mm:ss
+    yyyy-MM-dd HH:mm:ss.SSS
+    毫秒数字
+    毫秒数字字符串
+    .NET JSON日期格式
+    new Date(198293238)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+4、使用WriteClassName特性
+fastjson支持序列化时写入类型信息，从而使得反序列化时不至于类型信息丢失。
+==================================================================================================================================
+Color color = Color.RED;
+String json = JSON.toJSONString(color, SerializerFeature.WriteClassName);
+System.out.println(text);
+==================================================================================================================================
+输出结果：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{"@type":"java.awt.Color","r":255,"g":0,"b":0,"alpha":255}
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+由于序列化带了类型信息，使得反序列化时能够自动进行类型识别
+==================================================================================================================================
+String json = ...; // {"@type":"java.awt.Color","r":255,"g":0,"b":0,"alpha":255}
+Color color = (Color) JSON.parse(text);
+==================================================================================================================================
+
+
+5、浏览器和设备兼容
+fastjson缺省的序列化内容，是对序列化结果紧凑做了优化配置，使得序列化之后长度更小，但是这种优化配置是对一些浏览器和设备不兼容的。比如说在iphone上兼容emoji（绘文字）。
+==================================================================================================================================
+JSON.toJSONString(obj, SerializerFeature.BrowserCompatible);
+==================================================================================================================================
+
+
+6、循环引用
+很多场景中，我们需要序列化的对象中存在循环引用，在许多的json库中，这会导致stackoverflow。在功能强大的fastjson中，你不需要担心这个问题。
+==================================================================================================================================
+A a = new A();
+B b = new B(a);
+a.setB(b);
+String json = JSON.toJSONString(a); // {"b":{"a":{"$ref":".."}}}
+A a1 = JSON.parseObject(text, A.class);
+
+Assert.assertTrue(a1 == a1.getB().getA());
+==================================================================================================================================
+
+引用是通过"$ref"来表示的：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+引用 				描述
+"$ref":".." 			上一级
+"$ref":"@" 			当前对象，也就是自引用
+"$ref":"$" 			根对象
+"$ref":"$.children.0" 		基于路径的引用，相当于 root.getChildren().get(0)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+7、序列化超大数据
+如果你的JSON格式是一个巨大的JSON数组，有很多元素，则先调用startArray，然后挨个写入对象，然后调用endArray。
+==================================================================================================================================
+JSONWriter writer = new JSONWriter(new FileWriter("/tmp/huge.json"));
+writer.startArray();
+for (int i = 0; i < 1000 * 1000; ++i) {
+	writer.writeValue(new VO());
+}
+writer.endArray();
+writer.close();
+==================================================================================================================================
+
+如果你的JSON格式是一个巨大的JSONObject，有很多Key/Value对，则先调用startObject，然后挨个写入Key和Value，然后调用endObject。
+==================================================================================================================================
+JSONWriter writer = new JSONWriter(new FileWriter("/tmp/huge.json"));
+writer.startObject();
+for (int i = 0; i < 1000 * 1000; ++i) {
+	writer.writeKey("x" + i);
+	writer.writeValue(new VO());
+}
+writer.endObject();
+writer.close();
+==================================================================================================================================
+
+
+8、通过@JSONField定制序列化
+在某些场景，你可能需要定制序列化输出，比如说，希望序列化采用之后采用"ID"，而不是"id"，你可以使用@JSONField这个Annotation。
+可以把@JSONField配置在字段或者getter/setter方法上。
+==================================================================================================================================
+public class VO {
+	@JSONField(name="ID")
+	private int id;
+}
+==================================================================================================================================
+
+或者
+==================================================================================================================================
+public class VO {
+	private int id;
+
+	@JSONField(name="ID")
+	public int getId() { return id;}
+
+	@JSONField(name="ID")
+	public void setId(int value) {this.id = id;}
+}
+==================================================================================================================================
+
+使用format配置日期格式化
+==================================================================================================================================
+public class A {
+	// 配置date序列化和反序列使用yyyyMMdd日期格式
+	@JSONField(format="yyyyMMdd")
+	public Date date;
+}
+==================================================================================================================================
+
+使用serialize/deserialize指定字段不序列化
+==================================================================================================================================
+public class A {
+	@JSONField(serialize=false)
+	public Date date;
+}
+
+public class A {
+	@JSONField(deserialize=false)
+	public Date date;
+}
+==================================================================================================================================
+
+使用ordinal指定字段的顺序
+缺省fastjson序列化一个java bean，是根据fieldName的字母序进行序列化的，你可以通过ordinal指定字段的顺序。这个特性需要1.1.42以上版本。
+==================================================================================================================================
+public static class VO {
+	@JSONField(ordinal = 3)
+	private int f0;
+
+	@JSONField(ordinal = 2)
+	private int f1;
+
+	@JSONField(ordinal = 1)
+	private int f2;
+}
+==================================================================================================================================
+
+
+9、使用@JSONType配置
+和JSONField类似，但JSONType配置在类上，而不是field或者getter/setter方法上。
+
+
+10、通过SerializeFilter定制序列化
+SerializeFilter是通过编程扩展的方式定制序列化。fastjson支持6种SerializeFilter，用于不同场景的定制序列化。
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PropertyPreFilter	根据PropertyName判断是否序列化
+PropertyFilter		根据PropertyName和PropertyValue来判断是否序列化
+NameFilter		修改Key，如果需要修改Key,process返回值则可
+ValueFilter		修改Value
+BeforeFilter		序列化时在最前添加内容
+AfterFilter		序列化时在最后添加内容
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+以上的SerializeFilter在JSON.toJSONString中可以使用。
+==================================================================================================================================
+SerializeFilter filter = ...; // 可以是上面6个SerializeFilter的任意一种。
+JSON.toJSONString(obj, filter);
+==================================================================================================================================
+
+PropertyFilter 根据PropertyName和PropertyValue来判断是否序列化
+==================================================================================================================================
+public interface PropertyFilter extends SerializeFilter {
+	boolean apply(Object object, String propertyName, Object propertyValue);
+}
+==================================================================================================================================
+
+可以通过扩展实现根据object或者属性名称或者属性值进行判断是否需要序列化。例如：
+==================================================================================================================================
+PropertyFilter filter = new PropertyFilter() {
+	public boolean apply(Object source, String name, Object value) {
+		if ("id".equals(name)) {
+			int id = ((Integer) value).intValue();
+			return id >= 100;
+		}
+		return false;
+	}
+};
+
+JSON.toJSONString(obj, filter); // 序列化的时候传入filter
+==================================================================================================================================
+
+PropertyPreFilter 根据PropertyName判断是否序列化
+和PropertyFilter不同只根据object和name进行判断，在调用getter之前，这样避免了getter调用可能存在的异常。
+==================================================================================================================================
+public interface PropertyPreFilter extends SerializeFilter {
+	boolean apply(JSONSerializer serializer, Object object, String name);
+}
+==================================================================================================================================
+
+ValueFilter 序列化是修改Value
+==================================================================================================================================
+public interface ValueFilter extends SerializeFilter {
+	Object process(Object object, String propertyName, Object propertyValue);
+}
+==================================================================================================================================
+
+BeforeFilter 序列化时在最前添加内容
+==================================================================================================================================
+public abstract class BeforeFilter implements SerializeFilter {
+	protected final void writeKeyValue(String key, Object value) { ... }
+	// 需要实现的抽象方法，在实现中调用writeKeyValue添加内容
+	public abstract void writeBefore(Object object);
+}
+==================================================================================================================================
+
+AfterFilter 序列化时在最后添加内容
+==================================================================================================================================
+public abstract class AfterFilter implements SerializeFilter {
+	protected final void writeKeyValue(String key, Object value) { ... }
+	// 需要实现的抽象方法，在实现中调用writeKeyValue添加内容
+	public abstract void writeAfter(Object object);
+}
+==================================================================================================================================
+
+
+11、SerializeConfig
+SerializeConfig是全局唯一的，它继承自IdentityHashMap，IdentityHashMap是一个长度默认为1024的Hash桶，每个桶存放相同Hash的Entry（可看做链表节点，包含key、value、next指针、hash值）做成的单向链表，IdentityHashMap实现了HashMap的功能，但能避免HashMap并发时的死循环。
+
+SerializeConfig的主要功能是配置并记录每种Java类型对应的序列化类（ObjectSerializer接口的实现类），比如Boolean.class使用BooleanCodec（看命名就知道该类将序列化和反序列化实现写到一起了）作为序列化实现类，float[].class使用FloatArraySerializer作为序列化实现类。这些序列化实现类，有的是FastJSON中默认实现的（比如Java基本类），有的是通过ASM框架生成的（比如用户自定义类），有的甚至是用户自定义的序列化类（比如Date类型框架默认实现是转为毫秒，应用需要转为秒）。当然，这就涉及到是使用ASM生成序列化类还是使用JavaBean的序列化类类序列化的问题，这里判断根据就是是否Android环境（环境变量"java.vm.name"为"dalvik"或"lemur"就是Android环境），但判断不仅这里一处，后续还有更具体的判断。
+
+
+12、SerializeWriter
+SerializeWriter继承自Java的Writer，其实就是个转为FastJSON而生的StringBuilder，完成高性能的字符串拼接。该类成员如下：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+a) char buf[]
+可理解为每次序列化后字符串的内存存放地址。
+
+b) static ThreadLocal> bufLocal
+每次序列化，都需要重新分配buf[]内存空间。而bufLocal就是每次序列化后bug[]的内存空间保留到ThreadLocal里，但其中的值清空，避免频繁的内存分配和gc。
+
+c) int features
+生成json字符串的特征配置，默认配置为： 
+==================================================================================================================================
+<span>QuoteFieldNames | SkipTransientField | WriteEnumUsingToString | SortField</span>
+==================================================================================================================================
+表示含义为：双引号filedName and 忽略transientField and enum类型使用String写入 and 排序输出field。支持的所有特征在SerializerFeature类中，用户可在调用时显示配置，也可通过JSONFiled或JSONType注入配置。
+
+d) Writer 
+writer 用户指定将生成的json串直接写入某writer中，比如JSONWriter类。
+举个例子吧，writeStringWithDoubleQuote()表示用字符串用双引号写入，看看如何拼接字符串的。
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+13、SerialContext
+序列化上下文，在引用或循环引用中使用，该值会放入references的Hash桶（IdentityHashMap）缓存。
+
+
+14、ObjectSerializer
+ObjectSerializer只有一个接口方法，如下：
+==================================================================================================================================
+void write(JSONSerializer serializer, Objectobject, Object fieldName, Type fieldType);
+==================================================================================================================================
+可见，将JSONSerializer传入了ObjectSerializer中，而JSONSerializer有SerializeWriter成员，在每个具体ObjectSerializer实现中，直接使用SerializeWriter拼接字符串即可；Object即是待序列化的对象；fieldName则主要用于组合类引用时设置序列化上下文；而fieldType主要是为了泛型处理。
+
+JSONSerializer中通过public ObjectSerializer getObjectWriter(Class clazz)函数获取类对应的序列化类（即实现ObjectSerializer接口的类），大致逻辑如下图：
+http://cms.csdnimg.cn/article/201409/25/54238974f2942.jpg
+
+整个过程是先获取已实现基础类对应的序列化类，再通过类加载器获取自定义的AutowiredObjectSerializer序列化类，最后获取通过createJavaBeanSerializer()创建的序列化类。通过该方法会获取两种序列化类，一种是直接的JavaBeanSerializer（根据类的get方法、public filed等JavaBean特征序列化），另一种是createASMSerializer（通过ASM框架生成的序列化字节码），优先使用第二种。
+选择JavaBeanSerializer的条件为：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+该clazz为非public类
+该clazz的类加载器在ASMClassLoader的外部，或者clazz就是 Serializable.class，或者clazz就是Object.class
+JSONType的注解指明不适用ASM
+createASMSerializer加载失败 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+结合前面的讨论，可以得出使用ASM的条件：非Android系统、非基础类、非自定义的AutowiredObjectSerializer、非以上所列的使用JavaBeanSerializer条件。 
+
+具体基础类的序列化方法、JavaBeanSerializer的序列化方法和ASM生成的序列化方法可以参见代码。
+
+
+
+
+
+三、反序列化
+反序列化就是把JSON格式的文本转化为Java Bean对象。见下图：
+http://cms.csdnimg.cn/article/201409/25/542389e95fe2f.jpg
+同样是JSON类作为反序列化入口，实现了parse()、parseObject()、parseArray()等将json串转换为java对象的静态方法。这些方法的实现，实际托付给了DefaultJSONParser类。
+
+DefaultJSONParser类相当于序列化的JSONSerializer类，是个功能组合器，它将上层调用、反序列化配置、反序列化实现、词法解析等功能组合在一起，相当于设计模式中的外观模式，供外部统一调用。同样，我们来分析该类的几个重要成员，看看他是如何实现纷繁的反序列化功能的。
+
+
+1、指定Class信息反序列化
+通过指定类型信息，可以很方便的将"JSON文本"反序列化为"Java Bean"对象。
+==================================================================================================================================
+String json = ...; // {"r":255,"g":0,"b":0,"alpha":255}
+Color color = JSON.parseObject(json, Color.class);
+==================================================================================================================================
+
+
+2、类型集合的反序列化
+这个接口类似于parseObject
+==================================================================================================================================
+String json = ...; // [{ ... }, { ... }]
+List<User> users = JSON.parseArray(json, User.class);
+==================================================================================================================================
+
+
+3、泛型的反序列化
+如果你需要返回一个带泛型的对象，例如List<User>、Map<String, User>，你可以使用TypeReference来传入类型信息。
+==================================================================================================================================
+String json = ...; // {"name":{"name":"ljw",age:18}}
+Map<String, User> userMap = JSON.parseObject(json, new TypeReference<Map<String, User>>() {});
+==================================================================================================================================
+
+
+4、组合类型集合的反序列化
+比如在网络协议中，经常会存在这样的组合:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[{/*header*/}, {/*body*/}]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+fastjson对这种结构的反序列化有专门支持。
+==================================================================================================================================
+String text = ...; // [{/* header */}, {/* body */}]
+Type[] types = new Type[] {Header.class, Body.class};
+List<Object> list = JSON.parseArray(text, types);
+Header header = (Header) list.get(0);
+Body body = (Body) list.get(1);
+==================================================================================================================================
+
+
+5、使用@JSONCreator来指定构造函数来创建对象
+如果你的JavaBean没有缺省构造函数，可以使用@JSONCreator来指定构造函数
+==================================================================================================================================
+public static class Entity {
+	private final int id;
+	private final String name;
+
+	@JSONCreator
+	public Entity(@JSONField(name = "id") int id, @JSONField(name = "name") String name) {
+		this.id = id;
+		this.name = name;
+	}
+
+	public int getId() {
+		return id;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+}
+==================================================================================================================================
+
+
+6、把JSON文本反序列化为一个原型接口
+==================================================================================================================================
+public static interface Bean {
+    int getId();
+    void setId(int value);
+    String getName();
+    void setName(String value);
+}
+
+String text = "{\"id\":123, \"name\":\"chris\"}";
+Bean bean = JSON.parseObject(text, Bean.class);
+// 按接口调用
+Assert.assertEquals(123, bean.getId());
+Assert.assertEquals("chris", bean.getName());
+bean.setId(234);
+Assert.assertEquals(234, bean.getId());
+==================================================================================================================================
+
+
+7、反序列化超大数据
+如果你的JSON格式是一个巨大的JSON数组，有很多元素
+==================================================================================================================================
+JSONReader reader = new JSONReader(new FileReader("/tmp/huge.json"));
+reader.startArray();
+while(reader.hasNext()) {
+	VO vo = reader.readObject(VO.class);
+	// handle vo ...
+}
+reader.endArray();
+reader.close();
+==================================================================================================================================
+
+如果你的JSON格式是一个巨大的JSONObject，有很多Key/Value对
+==================================================================================================================================
+JSONReader reader = new JSONReader(new FileReader("/tmp/huge.json"));
+reader.startObject();
+while(reader.hasNext()) {
+	String key = reader.readString();
+	VO vo = reader.readObject(VO.class);
+	// handle vo ...
+}
+reader.endObject();
+reader.close();
+==================================================================================================================================
+
+8、通过ParseProcess定制反序列化
+ParseProcess是编程扩展定制反序列化的接口。fastjson支持如下ParseProcess：
+
+a) 使用ExtraProcessor 处理多余字段
+==================================================================================================================================
+public static class VO {
+	private int id;
+	private Map<String, Object> attributes = new HashMap<String, Object>();
+	public int getId() { return id; }
+	public void setId(int id) { this.id = id;}
+	public Map<String, Object> getAttributes() { return attributes;}
+}
+
+ExtraProcessor processor = new ExtraProcessor() {
+	public void processExtra(Object object, String key, Object value) {
+		VO vo = (VO) object;
+		vo.getAttributes().put(key, value);
+	}
+};
+
+VO vo = JSON.parseObject("{\"id\":123,\"name\":\"abc\"}", VO.class, processor);
+Assert.assertEquals(123, vo.getId());
+Assert.assertEquals("abc", vo.getAttributes().get("name"));
+==================================================================================================================================
+
+b) 使用ExtraTypeProvider 为多余的字段提供类型
+==================================================================================================================================
+public static class VO {
+	private int id;
+	private Map<String, Object> attributes = new HashMap<String, Object>();
+	public int getId() { return id; }
+	public void setId(int id) { this.id = id;}
+	public Map<String, Object> getAttributes() { return attributes;}
+}
+
+class MyExtraProcessor implements ExtraProcessor, ExtraTypeProvider {
+	public void processExtra(Object object, String key, Object value) {
+		VO vo = (VO) object;
+		vo.getAttributes().put(key, value);
+	}
+
+	public Type getExtraType(Object object, String key) {
+		if ("value".equals(key)) {
+			return int.class;
+		}
+		return null;
+	}
+};
+ExtraProcessor processor = new MyExtraProcessor();
+
+VO vo = JSON.parseObject("{\"id\":123,\"value\":\"123456\"}", VO.class, processor);
+Assert.assertEquals(123, vo.getId());
+Assert.assertEquals(123456, vo.getAttributes().get("value")); // value本应该是字符串类型的，通过getExtraType的处理变成Integer类型了。
+==================================================================================================================================
+
+
+9、ParserConfig
+同SerializeConfig，该类也是全局唯一的解析配置，其中的boolean asmEnable同样判断是否为Andriod环境。与SerializeConfig不同的是，配置类和对应反序列类的IdentityHashMap是该类的私有成员，构造函数的时候就将基础反序列化类加载进入IdentityHashMap中。
+
+
+10、JSONLexer
+JSONLexer是个接口类，定义了各种当前状态和操作接口。JSONLexerBase是对JSONLexer实现的抽象类，类似于序列化的SerializeWriter类，专门解析json字符串，并做了很多优化。实际使用的是JSONLexerBase的两个子类JSONScanner和JSONLexerBase，前者是对整个字符串的反序列化，后者是接Reader直接序列化。
+简析JSONLexerBase的某些成员：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+a) int token
+由于json串具有一定格式，字符串会根据某些特定的字符来自解释所表示的意义，那么这些特定的字符或所处位置的字符在FastJSON中就叫一个token，比如"("，"{"，"["，","，":"，key，value等，这些都定义在JSONToken类中。
+
+b) char[] sbuf
+解析器通过扫描输入字符串，将匹配得到的最细粒度的key、value会放到sbuf中。
+
+c) static ThreadLocal> SBUF_REF_LOCAL
+上面sbuf的空间不释放，在下次需要的时候直接拿出来使用，从避免的内存的频繁分配和gc。
+
+d) features
+反序列化特性的配置，同序列化的feature是通过int的位或来实现其特性开启还是关闭的。
+默认配置是： AutoCloseSource | UseBigDecimal | AllowUnQuotedFieldNames | AllowSingleQuotes | AllowArbitraryCommas | AllowArbitraryCommas | SortFeidFastMatch | IgnoreNotMatch ，表示检查json串的完整性 and 转换数值使用BigDecimal and 允许接受不使用引号的filedName and 允许接受使用单引号的key和value and 允许接受连续多个","的json串 and 使用排序后的field做快速匹配 and 忽略不匹配的key/value对。当然，这些参数也是可以通过其他途径配置的。
+
+e) hasSpecial
+对转义符的处理，比如'\0'，'\'等。
+
+词法解析器是基于预测的算法从左到右一次遍历的。由于json串具有自身的特点，比如为key的token后最有可能是":"，":"之后可能是value的token或为"{"的token或为"["的token等等，从而可以根据前一个token预判下一个token的可能，进而得知每个token的含义。分辨出各个token后，就可以获取具体值了，比如scanString获取key值，scanFieldString根据fieldName获取fieldValue，scanTrue获取java的true等等。其中，一般会对key进行缓存，放入SymbolTable（类似于IdentityHashMap）中，猜想这样做的目的是：应用解析的json串一般key就那么多，每次生成开销太多，干脆缓存着，用的就是就来取，还是空间换时间的技巧。
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+11、List<ExtraTypeProvider>和List<ExtraProcessor>
+视为对其他类型的处理和其他自定义处理而留的口子，用户可以自己实现对应接口即可。
+
+
+12、List<ResolveTask>
+List< ResolveTask >当然就是处理这种多层次甚至多重引用记录的list了。
+
+
+13、SymbolTable
+上面提到的key缓存。
+
+
+14、ObjectDeserializer
+跟ObjectSerializer也是相似的。先根据fieldType获取已缓存的解析器，如果没有则根据fieldClass获取已缓存的解析器，否则根据注解的JSONType获取解析器，否则通过当前线程加载器加载的AutowiredObjectDeserializer查找解析器，否则判断是否为几种常用泛型（比如Collection、Map等），最后通过createJavaBeanDeserializer来创建对应的解析器。
+当然，这里又分为JavaBeanDeserializer和asmFactory.createJavaBeanDeserializer两种。使用asm的条件如下：
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	非Android系统
+	该类及其除Object之外的所有父类为是public的
+	泛型参数非空
+	非asmFactory加载器之外的加载器加载的类
+	非接口类
+	类的setter函数不大于200
+	类有默认构造函数
+	类不能含有仅有getter的filed
+	类不能含有非public的field
+	类不能含有非静态的成员类
+	类本身不是非静态的成员类
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+使用ASM生成的反序列化器具有较高的反序列化性能，比如对排序的json串可按顺序匹配解析，从而减少读取的token数，但如上要求也是蛮严格的。综上，FastJSON反序列化也支持基础反序列化器、JavaBeanDeserializer反序列化器和ASM构造的反序列化器。
+
+
+
+
+
+四、其他
+
+1、SerializerFeature作用列表
+特性名称				默认值		特性说明
+QuoteFieldNames				true		输出属性名时是否使用双引号
+UseSingleQuotes				false		序列化为单引号格式的json文本（默认使用双引号）
+WriteMapNullValue			false		输出值为null的字段
+WriteEnumUsingToString			false		Enum输出toString()
+WriteEnumUsingName			true		Enum输出name()或者original
+UseISO8601DateFormat			false		Date使用ISO8601格式输出，示例："2011-06-23T23:11:56.550"
+WriteNullListAsEmpty			false		数组型属性如果为null，输出为[]，而不是null
+WriteNullStringAsEmpty			false		字符型属性如果为null，输出为""，而不是null
+WriteNullNumberAsZero			false		数值型属性如果为null，输出为0，而不是null
+WriteNullBooleanAsFalse			false		布尔型属性如果为null，输出为false，而不是null
+SkipTransientField			true		类中的Get方法对应的属性是transient，序列化时将会被忽略
+SortField				false		按属性名称排序后输出
+PrettyFormat				false		格式化（美化）后输出（默认是一行字符串）
+WriteClassName				false		序列化时写入类型信息，从而使得反序列化时不至于类型信息丢失
+DisableCircularReferenceDetect		false		禁用循环引用检测（fastjson为消除对同一对象循环引用的问题，而使用如后方式解决：'{"s1":{"age":16,"name":"s1"},"s2":{"$ref":"$.s1"}}'）
+WriteSlashAsSpecial					对斜杠"/"进行转义
+BrowserCompatible			false		将中文都会序列化为unicode编码（\uXXXX格式）。
+WriteDateUseDateFormat			false		Date使用"yyyy-MM-dd HH:mm:ss"格式输出，示例："2011-12-18 00:23:07"
+NotWriteRootClassName					
+DisableCheckSpecialChar			false		fastjson默认对双引号等特殊字符进行转义，如需禁用该功能，启用本特性
+BeanToArray
+WriteNonStringKeyAsString				将非字符串类型的key当成字符串来处理
+NotWriteDefaultValue					不输出缺省值，可以减少序列化后文本的大小
+BrowserSecure						
+IgnoreNonFieldGetter
+
+
+2、Feature作用列表
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
