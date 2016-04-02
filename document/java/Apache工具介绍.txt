@@ -356,6 +356,7 @@ org.apache.commons.lang3.math.NumberUtils - 数字工具，处理数字比较等
 NumberUtils.isNumber("6");
 
 
+org.apache.commons.lang3.RandomUtils - 随机工具
 
 
 
