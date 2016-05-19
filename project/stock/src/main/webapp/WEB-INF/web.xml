@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="http://java.sun.com/xml/ns/javaee" xmlns:web="http://xmlns.jcp.org/xml/ns/javaee/web-app_3_0.xsd"
+	xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_0.xsd"
+	version="3.0">
+	<context-param>
+		<param-name>contextConfigLocation</param-name>
+		<param-value>
+			classpath:applicationContext.xml
+		</param-value>
+	</context-param>
+
+	<context-param>
+		<param-name>spring.profiles.active</param-name>
+		<!-- <param-value>${profiles.activation}</param-value> -->
+		<param-value>dev</param-value>
+	</context-param>
+
+	<listener>
+		<listener-class>
+			org.springframework.web.context.ContextLoaderListener
+		</listener-class>
+	</listener>
+
+	<listener>
+		<listener-class>
+			org.springframework.web.context.request.RequestContextListener
+		</listener-class>
+	</listener>
+
+	<!-- 阿里EDAS的服务框架的限流降级 -->
+	<!-- <filter>
+		<filter-name>CommonFilter</filter-name>
+		<filter-class>
+			com.taobao.csp.sentinel.entrypoint.entrance.CommonFilter
+		</filter-class>
+	</filter>
+	<filter-mapping>
+		<filter-name>CommonFilter</filter-name>
+		<url-pattern>*</url-pattern>
+	</filter-mapping> -->
+
+	<!-- 阿里EDAS的服务框架的应用监控 -->
+	<!-- EagleEye（鹰眼）是Google的分布式调用跟踪系统Dapper在淘宝的实现。 -->
+	<!-- 分布式调用跟踪的意思，就是对一次前端请求产生的分布式调用都汇总起来做分析。 -->
+	<!-- <filter>
+		<filter-name>EagleEyeFilter</filter-name>
+		<filter-class>com.taobao.eagleeye.EagleEyeFilter</filter-class>
+		<init-param>
+			<param-name>useLocalIp</param-name>
+			<param-value>true</param-value>
+		</init-param>
+	</filter>
+	<filter-mapping>
+		<filter-name>EagleEyeFilter</filter-name>
+		<url-pattern>/*</url-pattern>
+	</filter-mapping> -->
+
+	<filter>
+		<filter-name>encodingFilter</filter-name>
+		<filter-class>
+			org.springframework.web.filter.CharacterEncodingFilter
+		</filter-class>
+		<init-param>
+			<param-name>encoding</param-name>
+			<param-value>UTF-8</param-value>
+		</init-param>
+		<init-param>
+			<param-name>forceEncoding</param-name>
+			<param-value>true</param-value>
+		</init-param>
+	</filter>
+	<filter-mapping>
+		<filter-name>encodingFilter</filter-name>
+		<url-pattern>/*</url-pattern>
+	</filter-mapping>
+
+	<!-- <filter>
+		<filter-name>springSessionRepositoryFilter</filter-name>
+		<filter-class>org.springframework.web.filter.DelegatingFilterProxy
+		</filter-class>
+	</filter>
+	<filter-mapping>
+		<filter-name>springSessionRepositoryFilter</filter-name>
+		<url-pattern>/*</url-pattern>
+	</filter-mapping> -->
+
+	<!-- springMVC -->
+	<servlet>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<servlet-class>
+			org.springframework.web.servlet.DispatcherServlet
+		</servlet-class>
+		<init-param>
+			<param-name>contextConfigLocation</param-name>
+			<param-value>
+				classpath:/spring/spring-mvc.xml
+			</param-value>
+		</init-param>
+		<load-on-startup>1</load-on-startup>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<url-pattern>/</url-pattern>
+	</servlet-mapping>
+
+	<welcome-file-list>
+		<welcome-file>index.html</welcome-file>
+	</welcome-file-list>
+
+	<session-config>
+		<session-timeout>1800</session-timeout>
+	</session-config>
+</web-app>

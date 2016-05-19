@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>  
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.mas.stock.dal.mapper.NewsMapper">
+
+	<sql id="TableName">
+		news
+	</sql>
+
+	<insert id="addNews" parameterType="NewsDO" useGeneratedKeys="true" keyProperty="id">
+		insert into news (
+			url, 
+			label, 
+			title, 
+			describe, 
+			content, 
+			publish_time,
+			gmt_create
+		) values (
+			#{url},
+			#{label},
+			#{title},
+			#{describe},
+			#{content},
+			#{publishTime},
+			#{gmtCreate}
+		)
+	</insert>
+	
+	<update id="updateNews" parameterType="NewsDO">
+		update 
+			news t 
+		set 
+		<if test="content != null">
+			t.content = #{content}, 
+		</if>
+		<if test="publishTime != null">
+			t.publish_time = #{publishTime}, 
+		</if>
+			t.gmt_modify = #{gmtModify} 
+		where t.url = #{url} 
+	</update>
+	
+	<select id="selectById" parameterType="Long" resultType="NewsDO">
+		select * from news where id = ${value}
+	</select>
+	
+	<select id="selectByUrl" parameterType="String" resultType="NewsDO">
+		select * from news where url = #{value}
+	</select>
+	
+	<select id="existByUrl" parameterType="String" resultType="Boolean">
+		<![CDATA[
+		select count(id) > 0 from news where url = #{url}
+		]]>
+	</select>
+	
+	<select id="pagedNews" parameterType="NewsDO" resultType="list">
+		select * from news t
+		<if test="condition != null">
+		where 1 = 1 
+			<if test="label != null">
+			and t.label = #{label}
+			</if>
+			<if test="publishTime != null">
+			and t.publish_time >= #{publishTime}
+			</if>
+		</if>
+		order by t.publish_time desc
+		limit ${offset}, ${limit}
+	</select>
+
+</mapper>

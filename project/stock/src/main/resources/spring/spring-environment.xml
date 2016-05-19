@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:util="http://www.springframework.org/schema/util" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.springframework.org/schema/beans 
+       	http://www.springframework.org/schema/beans/spring-beans-4.2.xsd
+       	http://www.springframework.org/schema/context 
+        http://www.springframework.org/schema/context/spring-context-4.2.xsd
+        http://www.springframework.org/schema/util
+        http://www.springframework.org/schema/util/spring-util-4.2.xsd">
+
+	<beans profile="dev">
+		<!-- 加载配置属性文件 -->
+		<context:property-placeholder
+			ignore-unresolvable="true" location="classpath:environment/dev/*.properties" />
+
+		<!-- 加载应用属性实例，可通过 @Value("#{"SYSTEM_CONFIG"['jdbc.driver']}") 方式引用 -->
+		<!-- 默认值方式， 可通过@Value("#{SYSTEM_CONFIG['activity.top.listAmount']}20") -->
+		<util:properties id="SYSTEM_CONFIG" location="classpath:environment/dev/*.properties"
+			local-override="true" />
+	</beans>
+
+	<beans profile="test">
+		<!-- 加载配置属性文件 -->
+		<context:property-placeholder
+			ignore-unresolvable="true" location="classpath:environment/test/*.properties" />
+
+		<!-- 加载应用属性实例，可通过 @Value("#{"SYSTEM_CONFIG"['jdbc.driver']}") 方式引用 -->
+		<!-- 默认值方式， 可通过@Value("#{SYSTEM_CONFIG['activity.top.listAmount']}20") -->
+		<util:properties id="SYSTEM_CONFIG" location="classpath:environment/test/*.properties"
+			local-override="true" />
+	</beans>
+
+	<beans profile="prod">
+		<!-- 加载配置属性文件 -->
+		<context:property-placeholder
+			ignore-unresolvable="true" location="classpath:environment/prod/*.properties" />
+
+		<!-- 加载应用属性实例，可通过 @Value("#{"SYSTEM_CONFIG"['jdbc.driver']}") 方式引用 -->
+		<!-- 默认值方式， 可通过@Value("#{SYSTEM_CONFIG['activity.top.listAmount']}20") -->
+		<util:properties id="SYSTEM_CONFIG" location="classpath:environment/prod/*.properties"
+			local-override="true" />
+	</beans>
+</beans>
